@@ -36,9 +36,13 @@ typedef vec<MGLfloat,3> vec3;   //data structure storing a 3 dimensional vector,
 typedef vec<MGLfloat,2> vec2;   //data structure storing a 2 dimensional vector, see vec.h
 
 MGLpoly_mode curr_type;
+MGLmatrix_mode curr_matrix;
 
 vec3 curr_color;
-mat4 curr_proj;
+mat4 curr_proj = {{1, 0, 0, 0, 
+					0, 1, 0 , 0,
+					0, 0 , 1, 0,
+					0, 0, 0, 1}};
 
 struct Vertex {
 	//MGLfloat w, x, y, z;
@@ -266,7 +270,7 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-
+	curr_matrix = mode;
 }
 
 /**
@@ -292,7 +296,7 @@ void mglPopMatrix()
  */
 void mglLoadIdentity()
 {
-	
+
 }
 
 /**
@@ -389,11 +393,12 @@ void mglOrtho(MGLfloat left,
               MGLfloat near,
               MGLfloat far)
 {
-
-	curr_proj = {{(2/(right - left)), 0, 0, -(right + left)/(right - left), 
-		0, (2/(top - bottom)), 0, -(top + bottom)/(top - bottom),
-		0, 0, (-2/(far - near)), -(far + near)/(far - near),
-		0, 0, 0, 1}};
+	if(curr_matrix == MGL_PROJECTION) {
+		curr_proj = {{(2/(right - left)), 0, 0, -(right + left)/(right - left), 
+			0, (2/(top - bottom)), 0, -(top + bottom)/(top - bottom),
+			0, 0, (-2/(far - near)), -(far + near)/(far - near),
+			0, 0, 0, 1}};
+	}
 }
 
 /**

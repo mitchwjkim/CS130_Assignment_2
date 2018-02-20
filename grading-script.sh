@@ -92,7 +92,7 @@ g++ -Wall -g -O3 -std=c++11 -M -x c++ - <<EOF        | tr ' \\' '\n' | grep . | 
 #include <string.h>
 #include <tgmath.h>
 #include <time.h>
-#include <uchar.h>
+
 #include <wchar.h>
 #include <wctype.h>
 EOF
