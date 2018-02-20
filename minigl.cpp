@@ -40,15 +40,18 @@ vec3 curr_color;
 
 class Vertex {
 	private:
-		MGLfloat w, x, y, z;
+		//MGLfloat w, x, y, z;
+		vec4 vertices;
 		vec3 color;
 		
 	public:
 	Vertex() {
 		w = x = y = z = 0;
 	}
-	Vertex(MGLfloat m_w, MGLfloat m_x, MGLfloat m_y, MGLfloat m_z, vec3 m_color) : w(m_w), x(m_x), y(m_y), z(m_z), color(m_color) {}
-};
+	Vertex(MGLfloat m_w, MGLfloat m_x, MGLfloat m_y, MGLfloat m_z, vec3 m_color) : vertices[0](m_w), vertices[1](m_x), vertices[2](m_y), vertices[3](m_z), color(m_color) {}
+}; 
+
+// Global List of VERTEX
 vector<Vertex> vec_vertex;
 
 class Triangle {
@@ -60,6 +63,8 @@ class Triangle {
 		}
 		Triangle(Vertex m_a, Vertex m_b, Vertex m_c) : a(m_a), b(m_b), c(m_c){}
 };
+
+// Global List of TRIANGLE
 vector<Triangle> vec_triangle;
 
 /**
@@ -70,8 +75,12 @@ inline void MGL_ERROR(const char* description) {
     exit(1);
 }
 
-void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
+MGLfloat getArea(vec2 a, vec2 b, vec2 c) {
+	return (a[0]*b[1] - a[1]*b[0] + b[0]*c[1] - b[1]*c[0] + c[0]*a[1] - c[1]*a[0]) * 0.5;
+}
 
+void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
+	
 }
 
 /**
@@ -87,7 +96,7 @@ void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* da
  * the two-dimensional screen.
  */
 void mglReadPixels(MGLsize width,
-                   MGLsize height,
+					MGLsize height,
                    MGLpixel *data)
 {
 	
@@ -99,14 +108,12 @@ void mglReadPixels(MGLsize width,
  */
 void mglBegin(MGLpoly_mode mode)
 {
-	curr_type = mode;
-	if(curr_type == MGL_TRIANGLES) {
-		if((vec_vertex.size() % 3) == 0) {
-			for(unsigned int i = 0; i < vec_vertex.size(); i+= 3) {
-				Triangle triang = Triangle(vec_vertex[i], vec_vertex[i+1], vec_vertex[i+2]);
-				vec_triangle.push_back(triang);
-			}
-		}
+	if((mode == MGL_TRIANGLES) || (mode == MGL_QUADS) {
+		curr_type = mode;
+	}
+	else {
+		MGL_ERROR("Invalid Polygon Mode.");
+		exit(1);
 	}
 }
 
@@ -116,7 +123,16 @@ void mglBegin(MGLpoly_mode mode)
  */
 void mglEnd()
 {
-	if(curr_type == MGL_QUADS) {
+	if(curr_type == MGL_TRIANGLES) {
+		if((vec_vertex.size() % 3) == 0) {
+			for(unsigned int i = 0; i < vec_vertex.size(); i+= 3) {
+				Triangle triang = Triangle(vec_vertex[i], vec_vertex[i+1], vec_vertex[i+2]);
+				vec_triangle.push_back(triang);
+			}
+		}
+	}
+
+	else if(curr_type == MGL_QUADS) {
 		if(vec_vertex.size() % 4 == 0) {
 			for(unsigned int i = 0; i < vec_vertex.size(); i+=4) {
 				Triangle triang = Triangle(vec_vertex[i], vec_vertex[i+1], vec_vertex[i+2]);
