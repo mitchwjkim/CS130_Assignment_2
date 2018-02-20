@@ -36,7 +36,6 @@ typedef vec<MGLfloat,3> vec3;   //data structure storing a 3 dimensional vector,
 typedef vec<MGLfloat,2> vec2;   //data structure storing a 2 dimensional vector, see vec.h
 
 MGLpoly_mode curr_type;
-MGLmatrix_mode curr_matrix;
 
 vec3 curr_color;
 mat4 curr_proj;
@@ -91,8 +90,26 @@ MGLfloat getArea(vec2 a, vec2 b, vec2 c) {
 	return (a[0]*(b[1] - c[1]) + a[1]*(c[0] - b[0]) + (b[0]*c[1] - b[1]*c[0]));
 }
 
-void mult(mat4 ortho, mat4 temp) {
-	
+void mult(Vertex &vec, mat4 mat) {
+	int hold, count = 0;
+	MGLfloat sum = 0;
+	Vertex temp;
+
+	for(unsigned int i = 0; i < 16; i+= 4) {
+		for(unsigned int j = 0; j < 4; j++) {
+			sum += vec.vertices[j] * mat.values[i + hold];
+			hold++;
+		}
+		temp.vertices[count] = sum;
+		count++;
+
+		hold = 0;
+		sum = 0;
+	}
+
+	for(unsigned int i = 0; i < 4; i++) {
+		vec.vertices[i] = temp.vertices[i];
+	}
 }
 
 // End of Helpers --------------------------------------------------------------------------
@@ -219,6 +236,10 @@ void mglVertex2(MGLfloat x,
 	// Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
 	// vec_vertex.push_back(v1);
 	Vertex vec(x, y, 0.0, 1.0);
+
+	// Multiply
+	mult(vec, curr_proj);
+
 	vec_vertex.push_back(vec);
 }
 
@@ -233,6 +254,10 @@ void mglVertex3(MGLfloat x,
 	// Vertex v1 = Vertex(1.0, x, y, z, curr_color);
 	// vec_vertex.push_back(v1);
 	Vertex vec(x, y, z, 1.0);
+
+	// Multiply
+	mult(vec, curr_proj);
+
 	vec_vertex.push_back(vec);
 }
 
@@ -241,7 +266,7 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-	curr_matrix = mode;
+
 }
 
 /**
@@ -364,19 +389,11 @@ void mglOrtho(MGLfloat left,
               MGLfloat near,
               MGLfloat far)
 {
-	mat4 ortho;
-	ortho.make_zero();
 
-	if(curr_matrix == MGL_PROJECTION) {
-
-	}
-	else if(curr_matrix == MGL_MODELVIEW) {
-
-	}
-	else {
-		MGL_ERROR("Invalid matrix");
-		exit(1);
-	}
+	curr_proj = {{(2/(right - left)), 0, 0, -(right + left)/(right - left), 
+		0, (2/(top - bottom)), 0, -(top + bottom)/(top - bottom),
+		0, 0, (-2/(far - near)), -(far + near)/(far - near),
+		0, 0, 0, 1}};
 }
 
 /**
