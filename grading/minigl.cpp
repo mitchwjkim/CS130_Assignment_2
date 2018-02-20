@@ -36,15 +36,12 @@ typedef vec<MGLfloat,3> vec3;   //data structure storing a 3 dimensional vector,
 typedef vec<MGLfloat,2> vec2;   //data structure storing a 2 dimensional vector, see vec.h
 
 MGLpoly_mode curr_type;
-MGLmatrix_mode curr_matrix;
-
 vec3 curr_color;
-mat4 curr_proj;
 
 struct Vertex {
 	//MGLfloat w, x, y, z;
 	vec4 vertices;
-	// vec3 color;
+	vec3 color;
 		
 	Vertex() {
 		vertices[0] = 0;
@@ -52,12 +49,12 @@ struct Vertex {
 		vertices[2] = 0;
 		vertices[3] = 0;
 	}
-	Vertex(MGLfloat x, MGLfloat y, MGLfloat z, MGLfloat w){
-		vertices[0] = x;
-		vertices[1] = y;
-		vertices[2] = z;
-		vertices[3] = w;
-		// color = m_color;
+	Vertex(MGLfloat w, MGLfloat x, MGLfloat y, MGLfloat z, vec3 m_color){
+		vertices[0] = w;
+		vertices[1] = x;
+		vertices[2] = y;
+		vertices[3] = z;
+		color = m_color;
 	}
 }; 
 
@@ -84,33 +81,24 @@ inline void MGL_ERROR(const char* description) {
     exit(1);
 }
 
-// Helper Functions ------------------------------------------------------------------------
-
 MGLfloat getArea(vec2 a, vec2 b, vec2 c) {
-	//return (a[0]*b[1] - a[1]*b[0] + b[0]*c[1] - b[1]*c[0] + c[0]*a[1] - c[1]*a[0]) * 0.5;
-	return (a[0]*(b[1] - c[1]) + a[1]*(c[0] - b[0]) + (b[0]*c[1] - b[1]*c[0]));
+	return (a[0]*b[1] - a[1]*b[0] + b[0]*c[1] - b[1]*c[0] + c[0]*a[1] - c[1]*a[0]) * 0.5;
 }
-
-void mult(mat4 ortho, mat4 temp) {
-	
-}
-
-// End of Helpers --------------------------------------------------------------------------
 
 void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
 	// Pixel A
-	MGLfloat fi_a = ((tri.a.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_a = ((tri.a.vertices[1] + 1.0) * height * 0.5)- 0.5;
+	MGLfloat fi_a = ((tri.a.vertices[0] + 1.0) * width) / 2.0 - 0.5;
+	MGLfloat fj_a = ((tri.a.vertices[1] + 1.0) * height) / 2.0 - 0.5;
 	vec2 Pixel_A = vec2(fi_a, fj_a);
 
 	// Pixel B
-	MGLfloat fi_b = ((tri.b.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_b = ((tri.b.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_b = ((tri.b.vertices[1] + 1.0) * width) / 2.0 - 0.5;
+	MGLfloat fj_b = ((tri.b.vertices[1] + 1.0) * height) / 2.0 - 0.5;
 	vec2 Pixel_B = vec2(fi_b, fj_b);
 
 	// Pixel C
-	MGLfloat fi_c = ((tri.c.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_c = ((tri.c.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_c = ((tri.c.vertices[2] + 1.0) * width) / 2.0 - 0.5;
+	MGLfloat fj_c = ((tri.c.vertices[2] + 1.0) * height) / 2.0 - 0.5;
 	vec2 Pixel_C = vec2(fi_c, fj_c);
 	
 	MGLfloat area = getArea(Pixel_A, Pixel_B, Pixel_C);
@@ -121,8 +109,8 @@ void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* da
 			MGLfloat beta = getArea(Pixel_A, vec2(i, j), Pixel_C) / area;
 			MGLfloat gamma = getArea(Pixel_A, Pixel_B, vec2(i, j)) / area;
 
-			if((alpha >= 0) && (beta >= 0) && (gamma >= 0)) {
-				data[i + (j* width)] = Make_Pixel(255, 255, 255);
+			if((alpha >= 0 && alpha <= 1) && (beta >= 0 && beta <= 1) && (gamma >= 0 && gamma <=1)) {
+				data[i + j* width] = Make_Pixel(255, 255, 255);
 			}
 		}
 	}
@@ -174,31 +162,20 @@ void mglEnd()
 {
 	if(curr_type == MGL_TRIANGLES) {
 		if((vec_vertex.size() % 3) == 0) {
-			for(unsigned int i = 0; i < vec_vertex.size(); i++) {
-				if(((i + 1) % 3) == 0) {
-					//cout << i << endl;
-					Triangle triang = Triangle(vec_vertex[(i + 1) - 3], vec_vertex[(i+1) - 2], vec_vertex[i]);
-					vec_triangle.push_back(triang);
-				}
-				else {
-					// Do Nothing
-				}
+			for(unsigned int i = 0; i < vec_vertex.size(); i+= 3) {
+				Triangle triang = Triangle(vec_vertex[i], vec_vertex[i+1], vec_vertex[i+2]);
+				vec_triangle.push_back(triang);
 			}
 		}
 	}
 
 	else if(curr_type == MGL_QUADS) {
-		if((vec_vertex.size() % 4) == 0) {
-			for(unsigned int i = 0; i < vec_vertex.size(); i++) {
-				if(((i + 1) % 4) == 0) {
-					Triangle triang = Triangle(vec_vertex[(i+1)-4], vec_vertex[(i+1) - 2], vec_vertex[(i+1) - 3]);
-					vec_triangle.push_back(triang);
-					triang = Triangle(vec_vertex[(i+1) - 4], vec_vertex[(i+1) - 2], vec_vertex[i]);
-					vec_triangle.push_back(triang);
-				}
-				else {
-					// Do Nothing
-				}
+		if(vec_vertex.size() % 4 == 0) {
+			for(unsigned int i = 0; i < vec_vertex.size(); i+=4) {
+				Triangle triang = Triangle(vec_vertex[i], vec_vertex[i+1], vec_vertex[i+2]);
+				vec_triangle.push_back(triang);
+				triang = Triangle(vec_vertex[i], vec_vertex[i+2], vec_vertex[i+3]);
+				vec_triangle.push_back(triang);
 			}
 		}
 	}
@@ -216,10 +193,8 @@ void mglEnd()
 void mglVertex2(MGLfloat x,
                 MGLfloat y)
 {
-	// Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, 0.0, 1.0);
-	vec_vertex.push_back(vec);
+	Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
+	vec_vertex.push_back(v1);
 }
 
 /**
@@ -230,10 +205,8 @@ void mglVertex3(MGLfloat x,
                 MGLfloat y,
                 MGLfloat z)
 {
-	// Vertex v1 = Vertex(1.0, x, y, z, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, z, 1.0);
-	vec_vertex.push_back(vec);
+	Vertex v1 = Vertex(1.0, x, y, z, curr_color);
+	vec_vertex.push_back(v1);
 }
 
 /**
@@ -241,7 +214,7 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-	curr_matrix = mode;
+	
 }
 
 /**
@@ -364,19 +337,7 @@ void mglOrtho(MGLfloat left,
               MGLfloat near,
               MGLfloat far)
 {
-	mat4 ortho;
-	ortho.make_zero();
-
-	if(curr_matrix == MGL_PROJECTION) {
-
-	}
-	else if(curr_matrix == MGL_MODELVIEW) {
-
-	}
-	else {
-		MGL_ERROR("Invalid matrix");
-		exit(1);
-	}
+	
 }
 
 /**
