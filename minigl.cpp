@@ -120,18 +120,18 @@ void mult(Vertex &vec, mat4 mat) {
 
 void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
 	// Pixel A
-	MGLfloat fi_a = ((tri.a.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_a = ((tri.a.vertices[1] + 1.0) * height * 0.5)- 0.5;
+	MGLfloat fi_a = ((tri.a.vertices[0] / tri.a.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_a = ((tri.a.vertices[1] / tri.a.vertices[3] + 1.0) * height * 0.5)- 0.5;
 	vec2 Pixel_A = vec2(fi_a, fj_a);
 
 	// Pixel B
-	MGLfloat fi_b = ((tri.b.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_b = ((tri.b.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_b = ((tri.b.vertices[0] / tri.b.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_b = ((tri.b.vertices[1] / tri.b.vertices[3] + 1.0) * height * 0.5) - 0.5;
 	vec2 Pixel_B = vec2(fi_b, fj_b);
 
 	// Pixel C
-	MGLfloat fi_c = ((tri.c.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_c = ((tri.c.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_c = ((tri.c.vertices[0] / tri.c.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_c = ((tri.c.vertices[1] / tri.c.vertices[3] + 1.0) * height * 0.5) - 0.5;
 	vec2 Pixel_C = vec2(fi_c, fj_c);
 	
 	MGLfloat area = getArea(Pixel_A, Pixel_B, Pixel_C);
@@ -379,7 +379,18 @@ void mglFrustum(MGLfloat left,
                 MGLfloat near,
                 MGLfloat far)
 {
-	
+	MGLfloat A = (right + left) / (right - left);
+	MGLfloat B = (top + bottom) / (top - bottom);
+	MGLfloat C = -(far + near) / (far - near0);
+	MGLfloat D = - (2 * far * near) / (fear - near);
+
+	if (curr_matrix == MGL_PROJECTION)
+	{
+		curr_proj = {{(2 * near) / (right - left), 0 , A, 0, 
+						0, (2 * near)/ (top - bottom), B, 0,
+						0, 0, C, D,
+						0, 0, -1, 0}};
+	}
 }
 
 /**
