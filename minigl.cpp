@@ -36,13 +36,17 @@ typedef vec<MGLfloat,3> vec3;   //data structure storing a 3 dimensional vector,
 typedef vec<MGLfloat,2> vec2;   //data structure storing a 2 dimensional vector, see vec.h
 
 MGLpoly_mode curr_type;
-MGLmatrix_mode curr_matrix;
+MGLmatrix_mode curr_mode;
 
 vec3 curr_color;
-mat4 curr_proj = {{1, 0, 0, 0, 
-					0, 1, 0 , 0,
-					0, 0 , 1, 0,
-					0, 0, 0, 1}};
+mat4 curr_proj;
+mat4 curr_model;
+mat4 *curr_matrix = &curr_proj;
+
+
+vector<mat4> vec_ModelView;
+vector<mat4> vec_ProjMatrix;
+vector<mat4> *curr_vec;
 
 struct Vertex {
 	//MGLfloat w, x, y, z;
@@ -50,20 +54,10 @@ struct Vertex {
 	vec3 color;
 		
 	Vertex() {
-		// vertices[0] = 0;
-		// vertices[1] = 0;
-		// vertices[2] = 0;
-		// vertices[3] = 0;
+
 		vertices = vec4(0,0,0,1);
 		color = vec3(0,0,0);
 	}
-	// Vertex(MGLfloat x, MGLfloat y, MGLfloat z, MGLfloat w){
-	// 	vertices[0] = x;
-	// 	vertices[1] = y;
-	// 	vertices[2] = z;
-	// 	vertices[3] = w;
-	// 	// color = m_color;
-	// }
 	Vertex(const vec4 &vec, const vec3 &m_color) {
 		vertices = vec;
 		color = m_color;
@@ -119,6 +113,19 @@ void mult(Vertex &vec, mat4 mat) {
 
 	for(unsigned int i = 0; i < 4; i++) {
 		vec.vertices[i] = temp.vertices[i];
+	}
+}
+
+mat4 top_of_active_matrix_stack() {
+	if(curr_mode == MGL_PROJECTION) {
+		return vec_ProjMatrix.back();
+	}
+	else if(curr_mode == MGL_MODELVIEW) {
+		return vec_ModelView.back();
+	}
+	else {
+		MGL_ERROR("Invalid matrix type.");
+		exit(1);
 	}
 }
 
@@ -243,14 +250,7 @@ void mglEnd()
 void mglVertex2(MGLfloat x,
                 MGLfloat y)
 {
-	// Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(vec4(x, y, 0, 1), curr_color);
-
-	// Multiply
-	mult(vec, curr_proj);
-
-	vec_vertex.push_back(vec);
+	mglVertex3(x, y, 0);
 }
 
 /**
@@ -262,9 +262,10 @@ void mglVertex3(MGLfloat x,
                 MGLfloat z)
 {
 
-	Vertex vec(vec4(x,y,z,1), curr_color);
-	// Multiply
-	mult(vec, curr_proj);
+	Vertex vec(curr_proj * curr_model * vec4(x,y,z,1), curr_color);
+	// // // Multiply
+	// mult(vec, curr_proj);
+	// mult(vec, curr_model);
 
 	vec_vertex.push_back(vec);
 }
@@ -274,7 +275,19 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-	curr_matrix = mode;
+	if(mode == MGL_PROJECTION) {
+		curr_matrix = &curr_proj;
+		curr_vec = &vec_ProjMatrix;
+	}
+	else if (mode == MGL_MODELVIEW) {
+		curr_matrix = &curr_model;
+		curr_vec = &vec_ModelView;
+	}
+	else {
+		MGL_ERROR("Invalid matrix mode.");
+		exit(1);
+	}
+	curr_mode = mode;
 }
 
 /**
@@ -283,7 +296,13 @@ void mglMatrixMode(MGLmatrix_mode mode)
  */
 void mglPushMatrix()
 {
-	
+	if(curr_mode == MGL_PROJECTION || curr_mode == MGL_MODELVIEW) {
+		curr_vec->push_back(*curr_matrix);
+	}
+	else {
+		MGL_ERROR("Invalid matrix mode.");
+		exit(1);
+	}
 }
 
 /**
@@ -292,7 +311,10 @@ void mglPushMatrix()
  */
 void mglPopMatrix()
 {
-	
+	if(!curr_vec->empty()) {
+		*curr_matrix = curr_vec->back();
+		curr_vec->pop_back();
+	}
 }
 
 /**
@@ -300,7 +322,10 @@ void mglPopMatrix()
  */
 void mglLoadIdentity()
 {
-
+	*curr_matrix = {{1, 0, 0, 0, 
+					0, 1, 0 , 0,
+					0, 0 , 1, 0,
+					0, 0, 0, 1}};
 }
 
 /**
@@ -334,7 +359,16 @@ void mglLoadMatrix(const MGLfloat *matrix)
  */
 void mglMultMatrix(const MGLfloat *matrix)
 {
-	
+	mat4 temp;
+	temp.make_zero();
+
+	for(unsigned int i = 0; i < 4; i++) {
+		for(unsigned int j = 0; j < 4; j++) {
+			temp(i, j) = *(matrix + (i + j * 4));
+		}
+	}
+
+	*curr_matrix = *curr_matrix * temp;
 }
 
 /**
@@ -345,7 +379,12 @@ void mglTranslate(MGLfloat x,
                   MGLfloat y,
                   MGLfloat z)
 {
-	
+	mat4 translate = {{1, 0, 0, 0,
+						0, 1, 0, 0,
+						0, 0, 1, 0,
+						x, y, z, 1}};
+
+	*curr_matrix = *curr_matrix * translate;
 }
 
 /**
@@ -358,7 +397,17 @@ void mglRotate(MGLfloat angle,
                MGLfloat y,
                MGLfloat z)
 {
-	
+	MGLfloat c = cos(angle * M_PI /180);
+	MGLfloat s = sin(angle * M_PI/180);
+
+	vec3 temp = vec3(x,y,z).normalized();
+
+	mat4 rotate = {{temp[0]*temp[0]*(1 - c) + c, temp[1]*temp[0]*(1 - c) + temp[2]*s, temp[0]*temp[2]*(1 - c) - temp[1]*s, 0,
+					temp[0]*temp[1]*(1 - c) - temp[2]*s, temp[1]*temp[1]*(1 - c) + c, temp[1]*temp[2]*(1 - c) + temp[0]*s, 0,
+					temp[0]*temp[2]*(1 - c) + temp[1]*s, temp[1]*temp[2]*(1 - c) - temp[0]*s, temp[2]*temp[2]*(1 - c) + c, 0,
+					0, 0, 0, 1}};
+
+	*curr_matrix = *curr_matrix * rotate;
 }
 
 /**
@@ -369,7 +418,12 @@ void mglScale(MGLfloat x,
               MGLfloat y,
               MGLfloat z)
 {
-	
+	mat4 scalar = {{x, 0, 0, 0,
+					0, y, 0, 0,
+					0, 0, z, 0,
+					0, 0, 0, 1}};
+
+	mglMultMatrix(scalar.values);
 }
 
 /**
@@ -388,13 +442,13 @@ void mglFrustum(MGLfloat left,
 	MGLfloat C = -(far + near) / (far - near);
 	MGLfloat D = - (2 * far * near) / (far - near);
 
-	if (curr_matrix == MGL_PROJECTION)
-	{
-		curr_proj = {{(2 * near) / (right - left), 0 , A, 0, 
-						0, (2 * near)/ (top - bottom), B, 0,
-						0, 0, C, D,
-						0, 0, -1, 0}};
-	}
+	// corrected
+	mat4 frustum = {{(2 * near) / (right - left), 0, 0, 0,
+					0, (2 * near)/ (top - bottom), 0, 0,
+					A, B, C, -1,
+					0, 0, D, 0}};
+
+	*curr_matrix = *curr_matrix * frustum;
 }
 
 /**
@@ -408,11 +462,14 @@ void mglOrtho(MGLfloat left,
               MGLfloat near,
               MGLfloat far)
 {
-	if(curr_matrix == MGL_PROJECTION) {
-		curr_proj = {{(2/(right - left)), 0, 0, -(right + left)/(right - left), 
-			0, (2/(top - bottom)), 0, -(top + bottom)/(top - bottom),
-			0, 0, (-2/(far - near)), -(far + near)/(far - near),
-			0, 0, 0, 1}};
+	if(curr_mode == MGL_PROJECTION) {
+		// corrected
+		mat4 ortho = {{(2/(right - left)), 0, 0, 0,
+						0, (2/(top - bottom)), 0, 0,
+						0, 0, (-2/(far - near)), 0,
+						-(right + left)/(right - left),  -(top + bottom)/(top - bottom), -(far + near)/(far - near), 1}};
+
+		*curr_matrix = *curr_matrix * ortho;
 	}
 }
 
