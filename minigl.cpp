@@ -47,20 +47,26 @@ mat4 curr_proj = {{1, 0, 0, 0,
 struct Vertex {
 	//MGLfloat w, x, y, z;
 	vec4 vertices;
-	// vec3 color;
+	vec3 color;
 		
 	Vertex() {
-		vertices[0] = 0;
-		vertices[1] = 0;
-		vertices[2] = 0;
-		vertices[3] = 0;
+		// vertices[0] = 0;
+		// vertices[1] = 0;
+		// vertices[2] = 0;
+		// vertices[3] = 0;
+		vertices = vec4(0,0,0,1);
+		color = vec3(0,0,0);
 	}
-	Vertex(MGLfloat x, MGLfloat y, MGLfloat z, MGLfloat w){
-		vertices[0] = x;
-		vertices[1] = y;
-		vertices[2] = z;
-		vertices[3] = w;
-		// color = m_color;
+	// Vertex(MGLfloat x, MGLfloat y, MGLfloat z, MGLfloat w){
+	// 	vertices[0] = x;
+	// 	vertices[1] = y;
+	// 	vertices[2] = z;
+	// 	vertices[3] = w;
+	// 	// color = m_color;
+	// }
+	Vertex(const vec4 &vec, const vec3 &m_color) {
+		vertices = vec;
+		color = m_color;
 	}
 }; 
 
@@ -143,7 +149,7 @@ void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* da
 			MGLfloat gamma = getArea(Pixel_A, Pixel_B, vec2(i, j)) / area;
 
 			if((alpha >= 0) && (beta >= 0) && (gamma >= 0)) {
-				data[i + (j* width)] = Make_Pixel(255, 255, 255);
+				data[i + (j* width)] = Make_Pixel(255 * tri.a.color[0], 255 * tri.a.color[1], 255 * tri.a.color[2]);
 			}
 		}
 	}
@@ -239,7 +245,7 @@ void mglVertex2(MGLfloat x,
 {
 	// Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
 	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, 0.0, 1.0);
+	Vertex vec(vec4(x, y, 0, 1), curr_color);
 
 	// Multiply
 	mult(vec, curr_proj);
@@ -255,10 +261,8 @@ void mglVertex3(MGLfloat x,
                 MGLfloat y,
                 MGLfloat z)
 {
-	// Vertex v1 = Vertex(1.0, x, y, z, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, z, 1.0);
 
+	Vertex vec(vec4(x,y,z,1), curr_color);
 	// Multiply
 	mult(vec, curr_proj);
 
@@ -381,8 +385,8 @@ void mglFrustum(MGLfloat left,
 {
 	MGLfloat A = (right + left) / (right - left);
 	MGLfloat B = (top + bottom) / (top - bottom);
-	MGLfloat C = -(far + near) / (far - near0);
-	MGLfloat D = - (2 * far * near) / (fear - near);
+	MGLfloat C = -(far + near) / (far - near);
+	MGLfloat D = - (2 * far * near) / (far - near);
 
 	if (curr_matrix == MGL_PROJECTION)
 	{
