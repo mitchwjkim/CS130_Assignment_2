@@ -16,11 +16,11 @@ sub run_test
 
     if(!defined $hashed_tests{$file})
     {
-        my $timeout = int(($max_time*1.2*3)/1000)+1;
-        if($timeout<2){$timeout=2;}
+        my $gtimeout = int(($max_time*1.2*3)/1000)+1;
+        if($gtimeout<2){$gtimeout=2;}
         `rm -f $dir/file.txt ; cp $test_dir/$file.txt $dir/file.txt`;
         `rm -f $dir/file.png ; cp $test_dir/$file.png $dir/file.png`;
-        `cd $dir ; timeout $timeout ./minigl-nogl -i file.txt -s file.png -o $token.txt -n 3 || echo TIMEOUT >> $token.txt`;
+        `cd $dir ; gtimeout $gtimeout ./minigl-nogl -i file.txt -s file.png -o $token.txt -n 3 || echo gtimeout >> $token.txt`;
         open(my $T, '<', "$dir/$token.txt");
         $_=<$T>;
         my $diff = 1000;
@@ -29,24 +29,24 @@ sub run_test
         {
             $time=$1;
         }
-        if(/TIMEOUT/)
+        if(/gtimeout/)
         {
-            $time="TIMEOUT";
+            $time="gtimeout";
         }
         $_=<$T>;
         if(/diff: (.*)/)
         {
             $diff = $1;
         }
-        if(/TIMEOUT/)
+        if(/gtimeout/)
         {
-            $time="TIMEOUT";
+            $time="gtimeout";
         }
         $hashed_tests{$file}=[$diff,$time];
         close($T);
     }
     my ($diff,$time) = @{$hashed_tests{$file}};
-    if($time eq "TIMEOUT")
+    if($time eq "gtimeout")
     {
         print "FAIL: ($file) Test timed out.\n";
     }

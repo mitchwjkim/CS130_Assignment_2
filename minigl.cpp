@@ -48,6 +48,8 @@ vector<mat4> vec_ModelView;
 vector<mat4> vec_ProjMatrix;
 vector<mat4> *curr_vec;
 
+vector<vector<MGLfloat>> vec_minZ;
+
 struct Vertex {
 	//MGLfloat w, x, y, z;
 	vec4 vertices;
@@ -129,9 +131,21 @@ mat4 top_of_active_matrix_stack() {
 	}
 }
 
+vector<MGLfloat> getColor(MGLfloat alpha, MGLfloat beta, MGLfloat gamma, Triangle tri) {
+	MGLfloat divisor = (alpha / tri.a.vertices[3]) + (beta / tri.b.vertices[3]) + (gamma / tri.c.vertices[3]);
+	
+	vector<MGLfloat> color;
+	color.push_back((alpha / tri.a.vertices[3]) / divisor);
+	color.push_back((beta / tri.b.vertices[3]) / divisor);
+	color.push_back((gamma / tri.c.vertices[3]) / divisor);
+
+	return color;
+}
+
 // End of Helpers --------------------------------------------------------------------------
 
 void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
+
 	// Pixel A
 	MGLfloat fi_a = ((tri.a.vertices[0] / tri.a.vertices[3] + 1.0) * width * 0.5) - 0.5;
 	MGLfloat fj_a = ((tri.a.vertices[1] / tri.a.vertices[3] + 1.0) * height * 0.5)- 0.5;
@@ -156,7 +170,18 @@ void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* da
 			MGLfloat gamma = getArea(Pixel_A, Pixel_B, vec2(i, j)) / area;
 
 			if((alpha >= 0) && (beta >= 0) && (gamma >= 0)) {
-				data[i + (j* width)] = Make_Pixel(255 * tri.a.color[0], 255 * tri.a.color[1], 255 * tri.a.color[2]);
+				MGLfloat z_depth = alpha * (tri.a.vertices[2]/tri.a.vertices[3]) + beta * (tri.b.vertices[2]/tri.b.vertices[3]) + gamma * (tri.c.vertices[2]/tri.c.vertices[3]);
+
+				if(z_depth >= -1 && z_depth <= 1 && (z_depth < vec_minZ[i][j])) {
+					vector<MGLfloat> color = getColor(alpha, beta, gamma, tri);
+
+					MGLfloat red = tri.a.color[0] * color[0] + tri.b.color[0] * color[1] + tri.c.color[0] * color[2];
+					MGLfloat green = tri.a.color[1] * color[0] + tri.b.color[1] * color[1] + tri.c.color[1] * color[2];
+					MGLfloat blue = tri.a.color[2] * color[0] + tri.b.color[2] * color[1] + tri.c.color[2] * color[2];
+
+					data[i + j * width] = Make_Pixel(255 * red, 255 * green, 255 * blue);
+					vec_minZ[i][j] = z_depth;
+				}
 			}
 		}
 	}
@@ -179,6 +204,18 @@ void mglReadPixels(MGLsize width,
                    MGLpixel *data)
 {
 	Make_Pixel(0, 0, 0);
+
+	// // RESIZING
+	vec_minZ.resize(width);
+
+	// Initialize it to a large value (2 is large enough for this case)
+	for(unsigned int j = 0; j < width; j++) {
+		vec_minZ[j].resize(height);
+		for(unsigned int k = 0; k < height; k++) {
+			vec_minZ[j][k] = 2;
+		}
+	}
+
 	for(unsigned int i = 0; i < vec_triangle.size(); i++) {
 		Rasterize_Triangle(vec_triangle[i], width, height, data);
 	}
@@ -342,7 +379,16 @@ void mglLoadIdentity()
  */
 void mglLoadMatrix(const MGLfloat *matrix)
 {
-	
+	mat4 temp;
+	temp.make_zero();
+
+	for(unsigned int i = 0; i < 4; i++) {
+		for(unsigned int j = 0; j < 4; j++) {
+			temp(i, j) = *(matrix + (i + j * 4));
+		}
+	}
+
+	*curr_matrix = temp;
 }
 
 /**
@@ -376,8 +422,8 @@ void mglMultMatrix(const MGLfloat *matrix)
  * for the translation vector given by (x, y, z).
  */
 void mglTranslate(MGLfloat x,
-                  MGLfloat y,
-                  MGLfloat z)
+					MGLfloat y,
+					MGLfloat z)
 {
 	mat4 translate = {{1, 0, 0, 0,
 						0, 1, 0, 0,
@@ -393,9 +439,9 @@ void mglTranslate(MGLfloat x,
  * from the origin to the point (x, y, z).
  */
 void mglRotate(MGLfloat angle,
-               MGLfloat x,
-               MGLfloat y,
-               MGLfloat z)
+				MGLfloat x,
+				MGLfloat y,
+				MGLfloat z)
 {
 	MGLfloat c = cos(angle * M_PI /180);
 	MGLfloat s = sin(angle * M_PI/180);
@@ -415,8 +461,8 @@ void mglRotate(MGLfloat angle,
  * for the given scale factors.
  */
 void mglScale(MGLfloat x,
-              MGLfloat y,
-              MGLfloat z)
+				MGLfloat y,
+				MGLfloat z)
 {
 	mat4 scalar = {{x, 0, 0, 0,
 					0, y, 0, 0,
@@ -456,11 +502,11 @@ void mglFrustum(MGLfloat left,
  * with the given clipping plane coordinates.
  */
 void mglOrtho(MGLfloat left,
-              MGLfloat right,
-              MGLfloat bottom,
-              MGLfloat top,
-              MGLfloat near,
-              MGLfloat far)
+				MGLfloat right,
+				MGLfloat bottom,
+				MGLfloat top,
+				MGLfloat near,
+				MGLfloat far)
 {
 	if(curr_mode == MGL_PROJECTION) {
 		// corrected
@@ -477,8 +523,8 @@ void mglOrtho(MGLfloat left,
  * Set the current color for drawn shapes.
  */
 void mglColor(MGLfloat red,
-              MGLfloat green,
-              MGLfloat blue)
+				MGLfloat green,
+				MGLfloat blue)
 {
 	curr_color[0] = red;
 	curr_color[1] = green;

@@ -36,27 +36,33 @@ typedef vec<MGLfloat,3> vec3;   //data structure storing a 3 dimensional vector,
 typedef vec<MGLfloat,2> vec2;   //data structure storing a 2 dimensional vector, see vec.h
 
 MGLpoly_mode curr_type;
+MGLmatrix_mode curr_mode;
 
 vec3 curr_color;
 mat4 curr_proj;
+mat4 curr_model;
+mat4 *curr_matrix = &curr_proj;
+
+
+vector<mat4> vec_ModelView;
+vector<mat4> vec_ProjMatrix;
+vector<mat4> *curr_vec;
+
+vector<vector<MGLfloat>> vec_minZ;
 
 struct Vertex {
 	//MGLfloat w, x, y, z;
 	vec4 vertices;
-	// vec3 color;
+	vec3 color;
 		
 	Vertex() {
-		vertices[0] = 0;
-		vertices[1] = 0;
-		vertices[2] = 0;
-		vertices[3] = 0;
+
+		vertices = vec4(0,0,0,1);
+		color = vec3(0,0,0);
 	}
-	Vertex(MGLfloat x, MGLfloat y, MGLfloat z, MGLfloat w){
-		vertices[0] = x;
-		vertices[1] = y;
-		vertices[2] = z;
-		vertices[3] = w;
-		// color = m_color;
+	Vertex(const vec4 &vec, const vec3 &m_color) {
+		vertices = vec;
+		color = m_color;
 	}
 }; 
 
@@ -112,25 +118,77 @@ void mult(Vertex &vec, mat4 mat) {
 	}
 }
 
+mat4 top_of_active_matrix_stack() {
+	if(curr_mode == MGL_PROJECTION) {
+		return vec_ProjMatrix.back();
+	}
+	else if(curr_mode == MGL_MODELVIEW) {
+		return vec_ModelView.back();
+	}
+	else {
+		MGL_ERROR("Invalid matrix type.");
+		exit(1);
+	}
+}
+
+Triangle getNDC(const Triangle &tri) {
+	Triangle temp = tri;
+
+	// First point
+	temp.a.vertices[0] = tri.a.vertices[0] / tri.a.vertices[3];
+	temp.a.vertices[1] = tri.a.vertices[1] / tri.a.vertices[3];
+	temp.a.vertices[2] = tri.a.vertices[2] / tri.a.vertices[3];
+
+	// Second point
+	temp.b.vertices[0] = tri.b.vertices[0] / tri.b.vertices[3];
+	temp.b.vertices[1] = tri.b.vertices[1] / tri.b.vertices[3];
+	temp.b.vertices[2] = tri.b.vertices[2] / tri.b.vertices[3];
+
+	// Third poing
+	temp.c.vertices[0] = tri.c.vertices[0] / tri.c.vertices[3];
+	temp.c.vertices[1] = tri.c.vertices[1] / tri.c.vertices[3];
+	temp.c.vertices[2] = tri.c.vertices[2] / tri.c.vertices[3];
+
+	// temp.a.vertices = tri.a.vertices * (1/3);
+	// temp.b.vertices = tri.b.vertices * (1/3);
+	// temp.c.vertices = tri.c.vertices * (1/3);
+
+	return temp;
+}
+
+vector<MGLfloat> getColor(MGLfloat alpha, MGLfloat beta, MGLfloat gamma, Triangle tri) {
+	MGLfloat divisor = (alpha / tri.a.vertices[3]) + (beta / tri.b.vertices[3]) + (gamma / tri.c.vertices[3]);
+	
+	vector<MGLfloat> color;
+	color.push_back((alpha / tri.a.vertices[3]) / divisor);
+	color.push_back((beta / tri.b.vertices[3]) / divisor);
+	color.push_back((gamma / tri.c.vertices[3]) / divisor);
+
+	return color;
+}
+
 // End of Helpers --------------------------------------------------------------------------
 
 void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* data) {
+
 	// Pixel A
-	MGLfloat fi_a = ((tri.a.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_a = ((tri.a.vertices[1] + 1.0) * height * 0.5)- 0.5;
+	MGLfloat fi_a = ((tri.a.vertices[0] / tri.a.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_a = ((tri.a.vertices[1] / tri.a.vertices[3] + 1.0) * height * 0.5)- 0.5;
 	vec2 Pixel_A = vec2(fi_a, fj_a);
 
 	// Pixel B
-	MGLfloat fi_b = ((tri.b.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_b = ((tri.b.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_b = ((tri.b.vertices[0] / tri.b.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_b = ((tri.b.vertices[1] / tri.b.vertices[3] + 1.0) * height * 0.5) - 0.5;
 	vec2 Pixel_B = vec2(fi_b, fj_b);
 
 	// Pixel C
-	MGLfloat fi_c = ((tri.c.vertices[0] + 1.0) * width * 0.5) - 0.5;
-	MGLfloat fj_c = ((tri.c.vertices[1] + 1.0) * height * 0.5) - 0.5;
+	MGLfloat fi_c = ((tri.c.vertices[0] / tri.c.vertices[3] + 1.0) * width * 0.5) - 0.5;
+	MGLfloat fj_c = ((tri.c.vertices[1] / tri.c.vertices[3] + 1.0) * height * 0.5) - 0.5;
 	vec2 Pixel_C = vec2(fi_c, fj_c);
 	
 	MGLfloat area = getArea(Pixel_A, Pixel_B, Pixel_C);
+
+	// Triangle temp = getNDC(tri);
 
 	for(unsigned int i = 0; i < width; i++) {
 		for(unsigned int j = 0; j < height; j++) {
@@ -139,7 +197,18 @@ void Rasterize_Triangle(const Triangle& tri, int width, int height, MGLpixel* da
 			MGLfloat gamma = getArea(Pixel_A, Pixel_B, vec2(i, j)) / area;
 
 			if((alpha >= 0) && (beta >= 0) && (gamma >= 0)) {
-				data[i + (j* width)] = Make_Pixel(255, 255, 255);
+				MGLfloat z_depth = alpha * (tri.a.vertices[2]/tri.a.vertices[3]) + beta * (tri.b.vertices[2]/tri.b.vertices[3]) + gamma * (tri.c.vertices[2]/tri.c.vertices[3]);
+
+				if(z_depth >= -1 && z_depth <= 1 && (z_depth < vec_minZ[i][j])) {
+					vector<MGLfloat> color = getColor(alpha, beta, gamma, tri);
+
+					MGLfloat red = tri.a.color[0] * color[0] + tri.b.color[0] * color[1] + tri.c.color[0] * color[2];
+					MGLfloat green = tri.a.color[1] * color[0] + tri.b.color[1] * color[1] + tri.c.color[1] * color[2];
+					MGLfloat blue = tri.a.color[2] * color[0] + tri.b.color[2] * color[1] + tri.c.color[2] * color[2];
+
+					data[i + j * width] = Make_Pixel(255 * red, 255 * green, 255 * blue);
+					vec_minZ[i][j] = z_depth;
+				}
 			}
 		}
 	}
@@ -162,6 +231,18 @@ void mglReadPixels(MGLsize width,
                    MGLpixel *data)
 {
 	Make_Pixel(0, 0, 0);
+
+	// // RESIZING
+	vec_minZ.resize(width);
+
+	// Initialize it to a large value (2 is large enough for this case)
+	for(unsigned int j = 0; j < width; j++) {
+		vec_minZ[j].resize(height);
+		for(unsigned int k = 0; k < height; k++) {
+			vec_minZ[j][k] = 2;
+		}
+	}
+
 	for(unsigned int i = 0; i < vec_triangle.size(); i++) {
 		Rasterize_Triangle(vec_triangle[i], width, height, data);
 	}
@@ -233,14 +314,7 @@ void mglEnd()
 void mglVertex2(MGLfloat x,
                 MGLfloat y)
 {
-	// Vertex v1 = Vertex(1.0, x, y, 0.0, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, 0.0, 1.0);
-
-	// Multiply
-	mult(vec, curr_proj);
-
-	vec_vertex.push_back(vec);
+	mglVertex3(x, y, 0);
 }
 
 /**
@@ -251,12 +325,11 @@ void mglVertex3(MGLfloat x,
                 MGLfloat y,
                 MGLfloat z)
 {
-	// Vertex v1 = Vertex(1.0, x, y, z, curr_color);
-	// vec_vertex.push_back(v1);
-	Vertex vec(x, y, z, 1.0);
 
-	// Multiply
-	mult(vec, curr_proj);
+	Vertex vec(curr_proj * curr_model * vec4(x,y,z,1), curr_color);
+	// // // Multiply
+	// mult(vec, curr_proj);
+	// mult(vec, curr_model);
 
 	vec_vertex.push_back(vec);
 }
@@ -266,7 +339,19 @@ void mglVertex3(MGLfloat x,
  */
 void mglMatrixMode(MGLmatrix_mode mode)
 {
-
+	if(mode == MGL_PROJECTION) {
+		curr_matrix = &curr_proj;
+		curr_vec = &vec_ProjMatrix;
+	}
+	else if (mode == MGL_MODELVIEW) {
+		curr_matrix = &curr_model;
+		curr_vec = &vec_ModelView;
+	}
+	else {
+		MGL_ERROR("Invalid matrix mode.");
+		exit(1);
+	}
+	curr_mode = mode;
 }
 
 /**
@@ -275,7 +360,13 @@ void mglMatrixMode(MGLmatrix_mode mode)
  */
 void mglPushMatrix()
 {
-	
+	if(curr_mode == MGL_PROJECTION || curr_mode == MGL_MODELVIEW) {
+		curr_vec->push_back(*curr_matrix);
+	}
+	else {
+		MGL_ERROR("Invalid matrix mode.");
+		exit(1);
+	}
 }
 
 /**
@@ -284,7 +375,10 @@ void mglPushMatrix()
  */
 void mglPopMatrix()
 {
-	
+	if(!curr_vec->empty()) {
+		*curr_matrix = curr_vec->back();
+		curr_vec->pop_back();
+	}
 }
 
 /**
@@ -292,7 +386,10 @@ void mglPopMatrix()
  */
 void mglLoadIdentity()
 {
-	
+	*curr_matrix = {{1, 0, 0, 0, 
+					0, 1, 0 , 0,
+					0, 0 , 1, 0,
+					0, 0, 0, 1}};
 }
 
 /**
@@ -309,7 +406,16 @@ void mglLoadIdentity()
  */
 void mglLoadMatrix(const MGLfloat *matrix)
 {
-	
+	mat4 temp;
+	temp.make_zero();
+
+	for(unsigned int i = 0; i < 4; i++) {
+		for(unsigned int j = 0; j < 4; j++) {
+			temp(i, j) = *(matrix + (i + j * 4));
+		}
+	}
+
+	*curr_matrix = temp;
 }
 
 /**
@@ -326,7 +432,16 @@ void mglLoadMatrix(const MGLfloat *matrix)
  */
 void mglMultMatrix(const MGLfloat *matrix)
 {
-	
+	mat4 temp;
+	temp.make_zero();
+
+	for(unsigned int i = 0; i < 4; i++) {
+		for(unsigned int j = 0; j < 4; j++) {
+			temp(i, j) = *(matrix + (i + j * 4));
+		}
+	}
+
+	*curr_matrix = *curr_matrix * temp;
 }
 
 /**
@@ -334,10 +449,15 @@ void mglMultMatrix(const MGLfloat *matrix)
  * for the translation vector given by (x, y, z).
  */
 void mglTranslate(MGLfloat x,
-                  MGLfloat y,
-                  MGLfloat z)
+					MGLfloat y,
+					MGLfloat z)
 {
-	
+	mat4 translate = {{1, 0, 0, 0,
+						0, 1, 0, 0,
+						0, 0, 1, 0,
+						x, y, z, 1}};
+
+	*curr_matrix = *curr_matrix * translate;
 }
 
 /**
@@ -346,11 +466,21 @@ void mglTranslate(MGLfloat x,
  * from the origin to the point (x, y, z).
  */
 void mglRotate(MGLfloat angle,
-               MGLfloat x,
-               MGLfloat y,
-               MGLfloat z)
+				MGLfloat x,
+				MGLfloat y,
+				MGLfloat z)
 {
-	
+	MGLfloat c = cos(angle * M_PI /180);
+	MGLfloat s = sin(angle * M_PI/180);
+
+	vec3 temp = vec3(x,y,z).normalized();
+
+	mat4 rotate = {{temp[0]*temp[0]*(1 - c) + c, temp[1]*temp[0]*(1 - c) + temp[2]*s, temp[0]*temp[2]*(1 - c) - temp[1]*s, 0,
+					temp[0]*temp[1]*(1 - c) - temp[2]*s, temp[1]*temp[1]*(1 - c) + c, temp[1]*temp[2]*(1 - c) + temp[0]*s, 0,
+					temp[0]*temp[2]*(1 - c) + temp[1]*s, temp[1]*temp[2]*(1 - c) - temp[0]*s, temp[2]*temp[2]*(1 - c) + c, 0,
+					0, 0, 0, 1}};
+
+	*curr_matrix = *curr_matrix * rotate;
 }
 
 /**
@@ -358,10 +488,15 @@ void mglRotate(MGLfloat angle,
  * for the given scale factors.
  */
 void mglScale(MGLfloat x,
-              MGLfloat y,
-              MGLfloat z)
+				MGLfloat y,
+				MGLfloat z)
 {
-	
+	mat4 scalar = {{x, 0, 0, 0,
+					0, y, 0, 0,
+					0, 0, z, 0,
+					0, 0, 0, 1}};
+
+	mglMultMatrix(scalar.values);
 }
 
 /**
@@ -375,7 +510,18 @@ void mglFrustum(MGLfloat left,
                 MGLfloat near,
                 MGLfloat far)
 {
-	
+	MGLfloat A = (right + left) / (right - left);
+	MGLfloat B = (top + bottom) / (top - bottom);
+	MGLfloat C = -(far + near) / (far - near);
+	MGLfloat D = - (2 * far * near) / (far - near);
+
+	// corrected
+	mat4 frustum = {{(2 * near) / (right - left), 0, 0, 0,
+					0, (2 * near)/ (top - bottom), 0, 0,
+					A, B, C, -1,
+					0, 0, D, 0}};
+
+	*curr_matrix = *curr_matrix * frustum;
 }
 
 /**
@@ -383,25 +529,29 @@ void mglFrustum(MGLfloat left,
  * with the given clipping plane coordinates.
  */
 void mglOrtho(MGLfloat left,
-              MGLfloat right,
-              MGLfloat bottom,
-              MGLfloat top,
-              MGLfloat near,
-              MGLfloat far)
+				MGLfloat right,
+				MGLfloat bottom,
+				MGLfloat top,
+				MGLfloat near,
+				MGLfloat far)
 {
+	if(curr_mode == MGL_PROJECTION) {
+		// corrected
+		mat4 ortho = {{(2/(right - left)), 0, 0, 0,
+						0, (2/(top - bottom)), 0, 0,
+						0, 0, (-2/(far - near)), 0,
+						-(right + left)/(right - left),  -(top + bottom)/(top - bottom), -(far + near)/(far - near), 1}};
 
-	curr_proj = {{(2/(right - left)), 0, 0, -(right + left)/(right - left), 
-		0, (2/(top - bottom)), 0, -(top + bottom)/(top - bottom),
-		0, 0, (-2/(far - near)), -(far + near)/(far - near),
-		0, 0, 0, 1}};
+		*curr_matrix = *curr_matrix * ortho;
+	}
 }
 
 /**
  * Set the current color for drawn shapes.
  */
 void mglColor(MGLfloat red,
-              MGLfloat green,
-              MGLfloat blue)
+				MGLfloat green,
+				MGLfloat blue)
 {
 	curr_color[0] = red;
 	curr_color[1] = green;
